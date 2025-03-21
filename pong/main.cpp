@@ -6,7 +6,7 @@
 #include <vector>
 #include <iostream>
 using namespace std;
-
+POINT mouse;
 
 // секция данных игры  
 
@@ -36,8 +36,26 @@ HBITMAP hBack;// хэндл для фонового изображения
 struct Item {
     equip name;
     sprite sprite;
-    bool isPicked;
 };
+
+string getIDString(equip itemID)
+{
+    switch (itemID) {
+    case equip::sword:
+        return "sword";
+        break;
+    case equip::axe:
+        return "axe";
+        break;
+    case equip::helmet:
+        return "helmet";
+        break;
+    default:
+        return "Unknown item\n";
+        break;
+    }
+    return NULL;
+}
 
 void ShowBitmap(HDC hDC, int x, int y, int x1, int y1, HBITMAP hBitmapBall, bool alpha = false)
 {
@@ -81,7 +99,7 @@ Location_ location[5];
 struct player_
 {
 
-    vector<equip> hero_items;
+    vector<Item> hero_items;
     int count_horse;
     int life;
 
@@ -95,25 +113,86 @@ struct player_
 
 player_ player;
 
-void PickItem(Item& item) {
-    if (!item.isPicked) {
-        player.hero_items.push_back(item.name); 
-        item.isPicked = true; 
-        
-    }
+void PickItem(int id) {
+
+    player.hero_items.push_back(location[currentLocation].locationItems[id]);
+    location[currentLocation].locationItems.erase(location[currentLocation].locationItems.begin() + id);
+    
 }
 
-void CheckCollisions() {
-    for (auto& i : location[currentLocation].locationItems) {
-        if (!i.isPicked) {
-            
-            if (racket.x < i.sprite.x + i.sprite.width &&
-                racket.x + racket.width > i.sprite.x &&
-                racket.y < i.sprite.y + i.sprite.height &&
-                racket.y + racket.height > i.sprite.y) {
-                PickItem(i); 
+void DropItem(int ID)
+{
+    player.hero_items[ID].sprite.x = racket.x+100;
+    player.hero_items[ID].sprite.y = racket.y;
+    location[currentLocation].locationItems.push_back(player.hero_items[ID]);
+        player.hero_items.erase(player.hero_items.begin() + ID);
+
+
+}
+
+HFONT hFont;
+HFONT hTmp;
+
+void PrintInventory()
+{
+    //поиграем шрифтами и цветами
+    SetTextColor(window.context, RGB(0, 0, 0));
+    SetBkColor(window.context, RGB(0, 0, 0));
+    SetBkMode(window.context, TRANSPARENT);
+    if (!hFont)
+    {
+        hFont = CreateFont(70, 0, 0, 0, FW_BOLD, 0, 0, 0, 0, 0, 0, 2, 0, "CALIBRI");
+        hTmp = (HFONT)SelectObject(window.context, hFont);
+    }
+
+    TextOutA(window.context, 10, 10, "Inventory", 9);
+
+    for (int i = 0; i < player.hero_items.size(); i++)
+    {
+        auto s = getIDString(player.hero_items[i].name);
+
+        float w = 300;
+        float h = 50;
+        float x = 10;
+        float y = 40 + h * i;
+
+        if (mouse.x > x && mouse.x<x + w && mouse.y>y && mouse.y < y + h)
+        {
+            SetTextColor(window.context, RGB(250, 0, 0));
+
+            if (GetAsyncKeyState(VK_LBUTTON))
+            {
+                DropItem(i);
             }
+
         }
+        else
+        {
+            SetTextColor(window.context, RGB(0, 0, 250));
+        }
+
+        TextOutA(window.context, x, y, s.c_str(), s.size());
+
+    }
+    
+}
+
+
+
+
+void CheckCollisions() {
+    int id = 0;
+    for (auto& i : location[currentLocation].locationItems) 
+    {
+        if (racket.x < i.sprite.x + i.sprite.width &&
+            racket.x + racket.width > i.sprite.x &&
+            racket.y < i.sprite.y + i.sprite.height &&
+            racket.y + racket.height > i.sprite.y) 
+        {
+            PickItem(id); 
+        }
+
+        id++;
     }
 }
 
@@ -137,8 +216,17 @@ void InitGame()
     helmetItem.sprite.y = 100;
     helmetItem.sprite.width = 50;
     helmetItem.sprite.height = 50;
-    helmetItem.isPicked = false;
+    
     location[0].locationItems.push_back(helmetItem);
+
+    Item axeItem;
+    axeItem.name = equip::axe;
+    axeItem.sprite.hBitmap = (HBITMAP)LoadImageA(NULL, "helmet.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    axeItem.sprite.x = 300;
+    axeItem.sprite.y = 100;
+    axeItem.sprite.width = 50;
+    axeItem.sprite.height = 50;
+    location[0].locationItems.push_back(axeItem);
 
 
     location[1].hBack = (HBITMAP)LoadImageA(NULL, "loc1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
@@ -236,9 +324,9 @@ void ShowItem()
 {
     for (auto i : location[currentLocation].locationItems)
     {
-        if (!i.isPicked)
+        //if (!i.isPicked)
         {
-            ShowBitmap(window.context, i.sprite.x, i.sprite.y, i.sprite.width, i.sprite.height, i.sprite.hBitmap, true);
+            ShowBitmap(window.context, i.sprite.x, i.sprite.y, i.sprite.width, i.sprite.height, i.sprite.hBitmap);
         }
         
     }
@@ -272,12 +360,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     InitGame();//здесь инициализируем переменные игры
 
     // mciSendString(TEXT("play ..\\Debug\\music.mp3 repeat"), NULL, 0, NULL);
-    // ShowCursor(NULL);
+     ShowCursor(FALSE);
 
     while (!GetAsyncKeyState(VK_ESCAPE))
     {
         ShowRacketAndBall();//рисуем фон, ракетку и шарик
         ShowItem();
+        PrintInventory();
+
+        
+        GetCursorPos(&mouse);
+        ScreenToClient(window.hWnd, &mouse);
+        int sz = 5;
+        Ellipse(window.context, mouse.x - sz, mouse.y - sz, mouse.x + sz, mouse.y + sz);
+
+
         BitBlt(window.device_context, 0, 0, window.width, window.height, window.context, 0, 0, SRCCOPY);//копируем буфер в окно
         Sleep(16);//ждем 16 милисекунд (1/количество кадров в секунду)
         CheckCollisions();
