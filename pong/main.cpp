@@ -29,7 +29,7 @@ typedef struct {
 } sprite;
 
 sprite racket;//ракетка игрока
-sprite door1;
+
 sprite healing;
 
 struct {
@@ -105,10 +105,14 @@ void ShowBitmap(HDC hDC, int x, int y, int x1, int y1, HBITMAP hBitmapBall, bool
 
 int currentLocation = 0;
 
+struct portal_ {
+    sprite spr;
+    int destination;
+};
+
 struct Location_ {
     HBITMAP hBack; 
-    int LeftPort; 
-    int RightPort;
+    vector<portal_> portal;
     vector<Item> locationItems;
     vector<sprite> locationObjects;
 };
@@ -147,7 +151,13 @@ void DropItem(int ID)
 
 }
 
+void printString(const char* text, int x, int y)
+{
+    TextOutA(window.context, x, y, text, strlen(text));
+}
+
 HFONT hFont;
+HFONT hFont2;
 HFONT hTmp;
 
 void PrintInventory()
@@ -156,12 +166,18 @@ void PrintInventory()
     SetTextColor(window.context, RGB(0, 0, 0));
     SetBkColor(window.context, RGB(0, 0, 0));
     SetBkMode(window.context, TRANSPARENT);
+    if (!hFont2)
+    {
+        hFont2 = CreateFont(50, 0, 0, 0, FW_LIGHT, 0, 0, 0, 0, 0, 0, 2, 0, "CALIBRI");
+    }
+
+
     if (!hFont)
     {
         hFont = CreateFont(70, 0, 0, 0, FW_BOLD, 0, 0, 0, 0, 0, 0, 2, 0, "CALIBRI");
-        hTmp = (HFONT)SelectObject(window.context, hFont);
     }
 
+    SelectObject(window.context, hFont);
     TextOutA(window.context, 10, 10, "Inventory", 9);
 
     for (int i = 0; i < player.hero_items.size(); i++)
@@ -171,12 +187,15 @@ void PrintInventory()
         float w = 300;
         float h = 50;
         float x = 10;
-        float y = 40 + h * i;
+        float y = 60 + h * i *2;
 
         if (mouse.x > x && mouse.x<x + w && mouse.y>y && mouse.y < y + h)
         {
-            SetTextColor(window.context, RGB(250, 0, 0));
+            SetTextColor(window.context, RGB(0, 0, 0));
+            SelectObject(window.context, hFont2);
+            printString("Press lkm to drop", x + w, y);
 
+            SetTextColor(window.context, RGB(255, 0, 0));
             if (GetAsyncKeyState(VK_LBUTTON))
             {
                 DropItem(i);
@@ -188,7 +207,8 @@ void PrintInventory()
             SetTextColor(window.context, RGB(0, 0, 250));
         }
 
-        TextOutA(window.context, x, y + 20, s.c_str(), s.size());
+        SelectObject(window.context, hFont);
+        TextOutA(window.context, x, y , s.c_str(), s.size());
 
     }
     
@@ -204,14 +224,33 @@ bool CheckCollision(float x1, float y1, float w1, float h1,
 }
 
 
+
 void ItemCheckCollisions() 
 {
+    bool pickKey = GetAsyncKeyState('P');
     int id = 0;
+
+    SetTextColor(window.context, RGB(0, 0, 0));
+    SetBkColor(window.context, RGB(0, 0, 0));
+    SetBkMode(window.context, TRANSPARENT);
+    if (!hFont)
+    {
+        hFont = CreateFont(70, 0, 0, 0, FW_BOLD, 0, 0, 0, 0, 0, 0, 2, 0, "CALIBRI");
+        hTmp = (HFONT)SelectObject(window.context, hFont);
+    }
+
+    
     for (auto& i : location[currentLocation].locationItems) 
     {
         if (CheckCollision (racket.x, racket.y, racket.width, racket.height, i.itemSprite.x, i.itemSprite.y, i.itemSprite.width, i.itemSprite.height))
         {
-            PickItem(id); 
+
+            printString("Press P to pick", racket.x + racket.width, racket.y + 40);
+            if (pickKey)
+            {
+                PickItem(id);
+            }
+           
         }
 
         id++;
@@ -225,11 +264,7 @@ void ObjectCheckCollisions()
     {
         if (CheckCollision(racket.x, racket.y, racket.width, racket.height, i.x, i.y, i.width, i.height))
         {
-            if (i.hBitmap == door1.hBitmap)
-            {
-                currentLocation = location[currentLocation].RightPort;
-                racket.x = 0;
-            }
+            
             if (i.hBitmap == healing.hBitmap)
             {
                 player.current_lives++;
@@ -252,14 +287,13 @@ void InitGame()
     //результат работы LoadImageA сохраняет в хэндлах битмапов, рисование спрайтов будет произовдиться с помощью этих хэндлов
    
     racket.hBitmap = (HBITMAP)LoadImageA(NULL, "racket.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    door1.hBitmap = (HBITMAP)LoadImageA(NULL, "racket.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+   
     healing.hBitmap = (HBITMAP)LoadImageA(NULL, "racket.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     player.hHealthFull = (HBITMAP)LoadImageA(NULL, "racket.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     player.hHealthEmpty = (HBITMAP)LoadImageA(NULL, "ball.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
     //------------------------------------------------------
     location[0].hBack = (HBITMAP)LoadImageA(NULL, "loc0.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    location[0].RightPort = 1;
-    location[0].LeftPort = -1;
+    
     Item helmetItem;
     helmetItem.name = equip::helmet;
     helmetItem.itemSprite.hBitmap = (HBITMAP)LoadImageA(NULL, "helmet.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
@@ -267,8 +301,23 @@ void InitGame()
     helmetItem.itemSprite.y = 100;
     helmetItem.itemSprite.width = 50;
     helmetItem.itemSprite.height = 50;
-    
     location[0].locationItems.push_back(helmetItem);
+    portal_ door1;
+    door1.destination = 2;
+    door1.spr.hBitmap = (HBITMAP)LoadImageA(NULL, "door1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    door1.spr.width = 50;
+    door1.spr.height = 50;
+    door1.spr.x = 500;
+    door1.spr.y = 500;
+    location[1].portal.push_back(door1);
+
+    portal_ port0;
+    port0.destination = 1;
+    port0.spr.width = 50;
+    port0.spr.height = 50;
+    port0.spr.x = window.width - door1.spr.width;
+    port0.spr.y = 500;
+    location[0].portal.push_back(port0);
 
     Item axeItem;
     axeItem.name = equip::axe;
@@ -287,8 +336,7 @@ void InitGame()
 
 
     location[1].hBack = (HBITMAP)LoadImageA(NULL, "loc1.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    location[1].RightPort = 2;
-    location[1].LeftPort = 0;
+    
 
     Item keyItem;
     keyItem.name = equip::key;
@@ -298,25 +346,17 @@ void InitGame()
     keyItem.itemSprite.width = 50;
     keyItem.itemSprite.height = 50;
     location[1].locationItems.push_back(keyItem);
-    door1.width = 100;
-    door1.height = 500;
-    door1.x = window.width - door1.width;
-    door1.y = (window.height - door1.height) / 2.;
     
-    location[1].locationObjects.push_back(door1);
 
 
     location[2].hBack = (HBITMAP)LoadImageA(NULL, "loc2.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    location[2].RightPort = 3;
-    location[2].LeftPort = 1;
+    
 
     location[3].hBack = (HBITMAP)LoadImageA(NULL, "loc3.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    location[3].RightPort = 4;
-    location[3].LeftPort = 2;
+   
 
     location[4].hBack = (HBITMAP)LoadImageA(NULL, "loc4.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    location[4].RightPort = -1;
-    location[4].LeftPort = 3;
+    
 
 
     racket.width = 50;
@@ -353,32 +393,20 @@ void ProcessInput()
     }
     
 
-        if (racket.x < 0)
+    for (auto& i : location[currentLocation].portal)
+    {
+        if(i.spr.hBitmap)
         {
-            if (location[currentLocation].LeftPort >= 0)
-            {
-                racket.x = window.width - racket.width;
-                currentLocation = location[currentLocation].LeftPort;
-            }
-            else
-            {
-                racket.x = 0;
-            }
+            ShowBitmap(window.context, i.spr.x, i.spr.y, i.spr.width, i.spr.height, i.spr.hBitmap);
         }
 
-        if (racket.x > window.width - racket.width)
+        if (CheckCollision(racket.x, racket.y, racket.width, racket.height, i.spr.x, i.spr.y, i.spr.width, i.spr.height))
         {
-            if (location[currentLocation].RightPort >= 0)
-            {
-                racket.x = 0;
-                currentLocation = location[currentLocation].RightPort;
-            }
-            else
-            {
-                racket.x = window.width - racket.width;
-            }
+            currentLocation = i.destination;
+            racket.x = 0;
         }
     }
+}
 
 
 void DrawHealth() {
@@ -414,7 +442,9 @@ void ShowItem()
 {
     for (const auto& i : location[currentLocation].locationItems)
     {
-       ShowBitmap(window.context, i.itemSprite.x, i.itemSprite.y, i.itemSprite.width, i.itemSprite.height, i.itemSprite.hBitmap);
+        
+            ShowBitmap(window.context, i.itemSprite.x, i.itemSprite.y, i.itemSprite.width, i.itemSprite.height, i.itemSprite.hBitmap);
+        
     }
    
 }
@@ -473,12 +503,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         int sz = 5;
         Ellipse(window.context, mouse.x - sz, mouse.y - sz, mouse.x + sz, mouse.y + sz);
 
-
-        BitBlt(window.device_context, 0, 0, window.width, window.height, window.context, 0, 0, SRCCOPY);//копируем буфер в окно
-        Sleep(16);//ждем 16 милисекунд (1/количество кадров в секунду)
         ItemCheckCollisions();
         ObjectCheckCollisions();
         ProcessInput();//опрос клавиатуры
+
+        BitBlt(window.device_context, 0, 0, window.width, window.height, window.context, 0, 0, SRCCOPY);//копируем буфер в окно
+        Sleep(16);//ждем 16 милисекунд (1/количество кадров в секунду)
 
     }
 
